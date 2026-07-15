@@ -53,4 +53,4 @@ jobs:
       # No NODE_AUTH_TOKEN: auth is the OIDC id-token above. Provenance is
       # attached automatically under trusted publishing.
       - name: Publish
-        run: npm publish --access public
+        run: npm publish --access public --loglevel verbose

@@ -85,6 +85,28 @@ real_on_path() { # agent-name -> abs path of real binary (excludes our shim dir)
   IFS=$_OIFS; return 1
 }
 
+# Fetch tmux-resurrect + tmux-continuum into our own dir so the restore layer
+# works without requiring tpm. Idempotent: pulls if already cloned.
+fetch_tmux_plugins() {
+  _pdir="$HOME_DIR/tmux-plugins"
+  mkdir -p "$_pdir"
+  if ! command -v git >/dev/null 2>&1; then
+    warn "git not found — skipping tmux plugin fetch; directory restore won't work until installed"
+    return 0
+  fi
+  for repo in tmux-resurrect tmux-continuum; do
+    _dst="$_pdir/$repo"
+    if [ -d "$_dst/.git" ]; then
+      ( git -C "$_dst" pull --ff-only --quiet 2>/dev/null ) || true
+      ok "tmux plugin: $repo ${c_dim}(up to date)${c_off}"
+    elif git clone --depth 1 --quiet "https://github.com/tmux-plugins/$repo" "$_dst" 2>/dev/null; then
+      ok "tmux plugin: $repo ${c_dim}fetched${c_off}"
+    else
+      warn "could not fetch $repo (offline?) — directory restore won't work until it's present"
+    fi
+  done
+}
+
 cmd_install() {
   agents="claude,codex"; do_tmux=1; do_shell=1
   while [ $# -gt 0 ]; do
@@ -131,15 +153,16 @@ cmd_install() {
   fi
 
   if [ "$do_tmux" = "1" ]; then
+    fetch_tmux_plugins
     write_block "$HOME/.tmux.conf" "$SRC/lib/tmux-snippet.conf"
     ok "tmux block -> $HOME/.tmux.conf"
   fi
 
   say ""
   say "${c_bold}Next steps${c_off}"
-  say "  1. Reload your shell:        ${c_dim}exec \$SHELL -l${c_off}"
-  [ "$do_tmux" = "1" ] && say "  2. Reload tmux + fetch plugins: ${c_dim}tmux source ~/.tmux.conf ; prefix + I${c_off}"
-  say "  3. Verify:                   ${c_dim}agent-resume doctor${c_off}"
+  say "  1. Reload your shell:  ${c_dim}exec \$SHELL -l${c_off}"
+  [ "$do_tmux" = "1" ] && say "  2. Reload tmux:        ${c_dim}tmux kill-server${c_off} (or restart tmux)"
+  say "  3. Verify:             ${c_dim}agent-resume doctor${c_off}"
   say ""
   say "Then test restore:  start a fresh ${c_bold}claude${c_off} in a tmux pane, then"
   say "  ${c_dim}tmux kill-server${c_off}  and reopen tmux — the pane returns to the same"
@@ -171,15 +194,14 @@ cmd_doctor() {
   if [ -n "${TMUX:-}" ]; then ok "inside tmux"; else warn "not inside tmux — directory restore needs it"; fi
   command -v tmux >/dev/null 2>&1 && ok "tmux installed: $(tmux -V 2>/dev/null)" || { bad "tmux not installed"; rc=1; }
 
-  # plugins
+  # plugins (self-contained under our dir; tpm not required)
   for p in tmux-resurrect tmux-continuum; do
-    if [ -d "$HOME/.tmux/plugins/$p" ] || [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/plugins/$p" ]; then
+    if [ -d "$HOME_DIR/tmux-plugins/$p" ]; then
       ok "$p present"
     else
-      warn "$p not fetched yet (open tmux, press prefix + I)"
+      warn "$p not fetched — re-run 'agent-resume install' (needs git + network)"; rc=1
     fi
   done
-  [ -d "$HOME/.tmux/plugins/tpm" ] && ok "tpm present" || warn "tpm not found — install from tmux-plugins/tpm"
 
   # shims on PATH
   case ":$PATH:" in *":$HOME_DIR/shims:"*) ok "shim dir on PATH" ;; *) bad "shim dir NOT on PATH (reload shell?)"; rc=1 ;; esac

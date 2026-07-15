@@ -10,6 +10,9 @@ All notable changes to this project are documented here. Format loosely follows
 - Fix: resolve the CLI's own path through symlinks so `install` works when the
   binary is an npm global bin (previously failed with `cp: .../lib/shim.sh: No
   such file or directory`).
+- Self-contained tmux setup: `install` now fetches tmux-resurrect and
+  tmux-continuum into `~/.config/agent-resume/tmux-plugins` and loads them
+  directly, so **tpm is no longer required**. `doctor` checks for them there.
 - Release automation moved to npm Trusted Publishing (OIDC) — no stored tokens,
   no secrets, no OTP.
 

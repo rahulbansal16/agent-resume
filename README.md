@@ -43,26 +43,26 @@ passes straight through. It never changes what the real CLI does in those cases.
 
 ## Install
 
-Requirements: `tmux` and [`tpm`](https://github.com/tmux-plugins/tpm).
+Requirements: `tmux` and `git` (used once to fetch the tmux plugins). **tpm is
+not required** — `install` fetches tmux-resurrect and tmux-continuum itself.
 
 ```sh
-# from a checkout
-sh install.sh
-
-# or via npm
+# via npm
 npx agent-resume install
 
-# or curl-pipe (after you host it)
+# or from a checkout
+sh install.sh
+
+# or curl-pipe
 curl -fsSL https://raw.githubusercontent.com/rahulbansal16/agent-resume/main/install.sh | sh
 ```
 
 Then:
 
 ```sh
-exec $SHELL -l                          # pick up the PATH change
-tmux source ~/.tmux.conf                # load the tmux block
-# inside tmux: press  prefix + I        # fetch resurrect + continuum
-agent-resume doctor                   # verify every link is green
+exec $SHELL -l          # pick up the PATH change (shims)
+tmux kill-server        # restart tmux so it loads the restore plugins
+agent-resume doctor     # verify every link is green
 ```
 
 Flags: `--agents claude,codex` (default), `--no-tmux`, `--no-shell`.
