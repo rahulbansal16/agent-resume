@@ -28,10 +28,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # NOTE: deliberately no `registry-url` here. setup-node's registry-url
+      # writes an .npmrc with `_authToken=${NODE_AUTH_TOKEN}`, which makes npm
+      # attempt (empty) token auth and 404. Trusted Publishing needs npm to see
+      # no token so it uses the OIDC id-token instead.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
 
       # Trusted Publishing needs npm >= 11.5.1; Node 22 still ships npm 10.
       - name: Upgrade npm

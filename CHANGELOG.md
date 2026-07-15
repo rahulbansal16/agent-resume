@@ -7,8 +7,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [0.1.1] - 2026-07-16
 
+- Fix: resolve the CLI's own path through symlinks so `install` works when the
+  binary is an npm global bin (previously failed with `cp: .../lib/shim.sh: No
+  such file or directory`).
 - Release automation moved to npm Trusted Publishing (OIDC) — no stored tokens,
-  no secrets, no OTP. No functional changes to the package itself.
+  no secrets, no OTP.
 
 ## [0.1.0] - 2026-07-16
 
