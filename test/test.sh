@@ -108,6 +108,29 @@ else
   fail=$((fail+1)); echo "  FAIL should have sent exactly one command"
 fi
 
+echo "resume command:"
+mkdir -p "$HOME/proj" "$HOME/proj2"
+LED="$AGENT_RESUME_HOME/sessions.tsv"
+{
+  printf '100\tclaude\t%s/proj\told-0000-0000-0000-000000000000\n' "$HOME"
+  printf '200\tclaude\t%s/proj\t%s\n' "$HOME" "$EXIST"          # newest, file exists
+  printf '150\tclaude\t%s/proj2\t%s\n' "$HOME" "$MISS"          # only entry, file missing
+} > "$LED"
+
+# 1. bare resume picks the newest recorded session whose file exists
+out="$(cd "$HOME/proj" && sh "$ROOT/bin/agent-resume" 2>&1)"
+case "$out" in
+  *"REAL:--resume $EXIST"*) pass=$((pass+1)); echo "  ok   bare resume picks newest recorded session" ;;
+  *) fail=$((fail+1)); echo "  FAIL bare resume: $out" ;;
+esac
+
+# 2. when the recorded session file is gone, fall back to --continue
+out="$(cd "$HOME/proj2" && sh "$ROOT/bin/agent-resume" 2>&1)"
+case "$out" in
+  *"REAL:--continue"*) pass=$((pass+1)); echo "  ok   missing session falls back to --continue" ;;
+  *) fail=$((fail+1)); echo "  FAIL resume fallback: $out" ;;
+esac
+
 echo ""
 echo "passed=$pass failed=$fail"
 [ "$fail" = "0" ]

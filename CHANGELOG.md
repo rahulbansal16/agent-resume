@@ -5,6 +5,17 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-16
+
+- **New: `agent-resume` resumes the last session on demand.** Run `agent-resume`
+  (bare) to resume the most recent agent session in the current directory, or
+  `agent-resume <agent>` (e.g. `claude`, `codex`) to target one. The shim now
+  records each launched session to a ledger (`~/.config/agent-resume/sessions.tsv`),
+  and the command runs `<agent> --resume <that-id>` — no picker, no remembering
+  ids. Falls back to the agent's own "resume last" (`claude --continue`,
+  `codex resume --last`) when there's no recorded session. Adapters gain an
+  optional `AGENT_RESUME_LAST` field.
+
 ## [0.1.3] - 2026-07-16
 
 - **Fix: Claude sessions now actually resume after a reboot.** tmux-resurrect

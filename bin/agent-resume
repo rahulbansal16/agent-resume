@@ -6,6 +6,9 @@
 # + layout) with a tiny per-agent shim (exact session resume).
 #
 # Usage:
+#   agent-resume                resume the last agent session in this directory
+#   agent-resume <agent>        resume that agent's last session (e.g. claude, codex)
+#   agent-resume resume [agent] same as above
 #   agent-resume install   [--agents claude,codex] [--no-tmux] [--no-shell]
 #   agent-resume uninstall
 #   agent-resume doctor
@@ -249,13 +252,66 @@ cmd_status() {
   done
 }
 
-case "${1:-help}" in
+# Resume the last agent session for this directory (any agent). With an agent
+# name, resume that agent's last session. Bare `agent-resume` runs this.
+cmd_resume() {
+  want="${1:-}"; ledger="$HOME_DIR/sessions.tsv"; cwd="$PWD"
+  entry=""
+  if [ -f "$ledger" ]; then
+    # newest line matching (agent filter + this cwd), then newest ignoring cwd
+    entry="$(awk -F'\t' -v a="$want" -v c="$cwd" '
+      (a==""||$2==a) && $3==c && ($1+0)>=best { best=$1; line=$0 } END{print line}' "$ledger")"
+    [ -n "$entry" ] || entry="$(awk -F'\t' -v a="$want" '
+      (a==""||$2==a) && ($1+0)>=best { best=$1; line=$0 } END{print line}' "$ledger")"
+  fi
+
+  if [ -n "$entry" ]; then
+    agent="$(printf '%s' "$entry" | cut -f2)"
+    sid="$(printf '%s' "$entry" | cut -f4)"
+    [ -f "$HOME_DIR/adapters/$agent.conf" ] || die "no adapter for '$agent'"
+    # shellcheck disable=SC1090
+    . "$HOME_DIR/adapters/$agent.conf"
+    real="$(real_on_path "$agent")" || die "'$agent' not found on PATH"
+    # if the session file is gone, fall through to the resume-last fallback
+    if [ -z "$AGENT_SESSION_DIR" ] || [ ! -d "$AGENT_SESSION_DIR" ] || \
+       find "$AGENT_SESSION_DIR" -name "$sid.$AGENT_SESSION_EXT" -print 2>/dev/null | grep -q .; then
+      say "${c_dim}resuming $agent ${sid%%-*}… in $cwd${c_off}"
+      # shellcheck disable=SC2086
+      exec "$real" $AGENT_RESUME_FLAG "$sid"
+    fi
+    warn "recorded $agent session no longer exists; falling back"
+    want="$agent"
+  fi
+
+  # Fallback: no recorded session. Use the agent's own "resume last" if we know it.
+  if [ -n "$want" ] && [ -f "$HOME_DIR/adapters/$want.conf" ]; then
+    # shellcheck disable=SC1090
+    . "$HOME_DIR/adapters/$want.conf"
+    real="$(real_on_path "$want")" || die "'$want' not found on PATH"
+    [ -n "${AGENT_RESUME_LAST:-}" ] || die "no recorded session and no resume-last for '$want'"
+    say "${c_dim}no recorded session; resuming $want's most recent${c_off}"
+    # shellcheck disable=SC2086
+    exec "$real" $AGENT_RESUME_LAST
+  fi
+
+  die "no recorded session for $cwd.
+  Start one by just running an agent (e.g. ${c_bold}claude${c_off}), or name it: ${c_bold}agent-resume claude${c_off}"
+}
+
+case "${1:-}" in
+  "")        cmd_resume "" ;;                        # bare: resume last session here
+  resume)    shift; cmd_resume "${1:-}" ;;           # resume [agent]
   install)   shift; cmd_install "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   doctor)    shift; cmd_doctor "$@" ;;
   status)    shift; cmd_status "$@" ;;
   version|-v|--version) say "agent-resume $VERSION" ;;
-  help|-h|--help|*)
-    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  help|-h|--help)
+    sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    # an agent name (has an adapter) means "resume that agent"; else show help
+    if [ -f "$HOME_DIR/adapters/$1.conf" ]; then cmd_resume "$1"
+    else sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; fi
     ;;
 esac

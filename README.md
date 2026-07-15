@@ -12,6 +12,21 @@ recency, so with several terminals open, `claude --continue` can grab the wrong
 conversation. And after a reboot you lose both your working directory and your
 session. `agent-resume` fixes both by standing on `tmux` instead of reinventing it.
 
+## Resume the last session, any agent
+
+Just run the command — it resumes the last agent session you started in the
+current directory, whichever agent it was:
+
+```sh
+agent-resume            # resume the last session here (claude, codex, hermes, …)
+agent-resume claude     # resume the last claude session here
+agent-resume codex      # resume the last codex session
+```
+
+The shim records each session you start, so `agent-resume` picks the right one
+for your directory and runs `<agent> --resume <that-session-id>` — no picker, no
+remembering ids. (It also powers the automatic tmux restore below.)
+
 ```
 tmux              keeps live sessions alive on detach/reattach   (the 95% case, free)
 tmux-resurrect    restores window layout + each pane's directory  (free)

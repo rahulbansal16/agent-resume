@@ -87,7 +87,13 @@ if [ "${AGENT_SUPPORTS_NEWID:-0}" = "1" ] && [ -n "$AGENT_NEWID_FLAG" ]; then
   else
     newid="$(cat /proc/sys/kernel/random/uuid 2>/dev/null)"
   fi
-  [ -n "$newid" ] && exec "$REAL" "$AGENT_NEWID_FLAG" "$newid" "$@"
+  if [ -n "$newid" ]; then
+    # record this launch so `agent-resume` can resume it later:
+    # epoch <tab> agent <tab> cwd <tab> session-id
+    { printf '%s\t%s\t%s\t%s\n' "$(date +%s 2>/dev/null || echo 0)" "$self" "$PWD" "$newid" \
+        >> "$HOME_DIR/sessions.tsv"; } 2>/dev/null || true
+    exec "$REAL" "$AGENT_NEWID_FLAG" "$newid" "$@"
+  fi
 fi
 
 exec "$REAL" "$@"
