@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-16
+
+- Release automation moved to npm Trusted Publishing (OIDC) — no stored tokens,
+  no secrets, no OTP. No functional changes to the package itself.
+
 ## [0.1.0] - 2026-07-16
 
 Initial release.
