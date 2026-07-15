@@ -1,0 +1,6 @@
+*.bak
+*.aaff.*
+.DS_Store
+node_modules/
+tmp/
+*.log

@@ -1,0 +1,223 @@
+#!/bin/sh
+# agent-resume — per-terminal directory + agent-session restore.
+#
+# Makes your terminal come back to the same directory AND the same claude/codex
+# conversation after a reboot, by combining tmux-resurrect/continuum (directory
+# + layout) with a tiny per-agent shim (exact session resume).
+#
+# Usage:
+#   agent-resume install   [--agents claude,codex] [--no-tmux] [--no-shell]
+#   agent-resume uninstall
+#   agent-resume doctor
+#   agent-resume status
+#   agent-resume version
+#
+# POSIX sh, zero dependencies.
+
+set -eu
+
+VERSION="0.1.0"
+BEGIN_MARK="# >>> agent-resume >>>"
+END_MARK="# <<< agent-resume <<<"
+HOME_DIR="${AGENT_RESUME_HOME:-$HOME/.config/agent-resume}"
+
+# Directory this script lives in (the source checkout).
+SRC="$(cd "$(dirname "$0")/.." && pwd)"
+
+c_bold=""; c_dim=""; c_red=""; c_grn=""; c_ylw=""; c_off=""
+if [ -t 1 ]; then
+  c_bold="$(printf '\033[1m')"; c_dim="$(printf '\033[2m')"
+  c_red="$(printf '\033[31m')"; c_grn="$(printf '\033[32m')"
+  c_ylw="$(printf '\033[33m')"; c_off="$(printf '\033[0m')"
+fi
+say()  { printf '%s\n' "$*"; }
+ok()   { printf '  %s✓%s %s\n' "$c_grn" "$c_off" "$*"; }
+warn() { printf '  %s!%s %s\n' "$c_ylw" "$c_off" "$*"; }
+bad()  { printf '  %s✗%s %s\n' "$c_red" "$c_off" "$*"; }
+die()  { printf '%sagent-resume:%s %s\n' "$c_red" "$c_off" "$*" >&2; exit 1; }
+
+# Replace (or append) an idempotent marked block in a file.
+write_block() { # file, content-file
+  _file="$1"; _content="$2"
+  [ -f "$_file" ] || : > "$_file"
+  _tmp="$_file.aaff.$$"
+  awk -v b="$BEGIN_MARK" -v e="$END_MARK" '
+    $0==b {skip=1} skip && $0==e {skip=0; next} skip {next} {print}
+  ' "$_file" > "$_tmp"
+  # drop trailing blank lines, then append the fresh block
+  printf '%s\n%s\n' "$BEGIN_MARK" "$(cat "$_content")" >> "$_tmp"
+  printf '%s\n' "$END_MARK" >> "$_tmp"
+  mv "$_tmp" "$_file"
+}
+remove_block() { # file
+  _file="$1"; [ -f "$_file" ] || return 0
+  _tmp="$_file.aaff.$$"
+  awk -v b="$BEGIN_MARK" -v e="$END_MARK" '
+    $0==b {skip=1} skip && $0==e {skip=0; next} skip {next} {print}
+  ' "$_file" > "$_tmp"
+  mv "$_tmp" "$_file"
+}
+
+detect_shell_rc() {
+  case "${SHELL:-}" in
+    *zsh)  printf '%s\n' "${ZDOTDIR:-$HOME}/.zshrc" ;;
+    *bash) printf '%s\n' "$HOME/.bashrc" ;;
+    *)     printf '%s\n' "$HOME/.profile" ;;
+  esac
+}
+
+real_on_path() { # agent-name -> abs path of real binary (excludes our shim dir)
+  _self="$1"; _OIFS=$IFS; IFS=:
+  for _d in $PATH; do
+    case "$_d" in "$HOME_DIR/shims"|"") continue ;; esac
+    if [ -x "$_d/$_self" ]; then IFS=$_OIFS; printf '%s\n' "$_d/$_self"; return 0; fi
+  done
+  IFS=$_OIFS; return 1
+}
+
+cmd_install() {
+  agents="claude,codex"; do_tmux=1; do_shell=1
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --agents) agents="$2"; shift 2 ;;
+      --agents=*) agents="${1#*=}"; shift ;;
+      --no-tmux) do_tmux=0; shift ;;
+      --no-shell) do_shell=0; shift ;;
+      *) die "unknown install flag: $1" ;;
+    esac
+  done
+
+  say "${c_bold}Installing agent-resume $VERSION${c_off}"
+  mkdir -p "$HOME_DIR/shims" "$HOME_DIR/adapters"
+  cp "$SRC/lib/shim.sh" "$HOME_DIR/shim.sh"
+  cp "$SRC/lib/pre-restore-hook.sh" "$HOME_DIR/pre-restore-hook.sh"
+  chmod +x "$HOME_DIR/pre-restore-hook.sh"
+  for a in "$SRC"/adapters/*.conf; do cp "$a" "$HOME_DIR/adapters/"; done
+  ok "core files -> $HOME_DIR"
+
+  # Per-agent shims, only for agents actually present.
+  installed=""
+  _OIFS=$IFS; IFS=,
+  for ag in $agents; do
+    IFS=$_OIFS
+    [ -f "$HOME_DIR/adapters/$ag.conf" ] || { warn "no adapter for '$ag', skipping"; continue; }
+    if real="$(real_on_path "$ag")"; then
+      cp "$HOME_DIR/shim.sh" "$HOME_DIR/shims/$ag"
+      chmod +x "$HOME_DIR/shims/$ag"
+      ok "shim: $ag ${c_dim}-> $real${c_off}"
+      installed="$installed $ag"
+    else
+      warn "'$ag' not found on PATH, skipping its shim"
+    fi
+    IFS=,
+  done
+  IFS=$_OIFS
+
+  if [ "$do_shell" = "1" ]; then
+    rc="$(detect_shell_rc)"
+    _cf="$(mktemp)"; printf 'export PATH="%s/shims:$PATH"\n' "$HOME_DIR" > "$_cf"
+    write_block "$rc" "$_cf"; rm -f "$_cf"
+    ok "PATH block -> $rc"
+  fi
+
+  if [ "$do_tmux" = "1" ]; then
+    write_block "$HOME/.tmux.conf" "$SRC/lib/tmux-snippet.conf"
+    ok "tmux block -> $HOME/.tmux.conf"
+  fi
+
+  say ""
+  say "${c_bold}Next steps${c_off}"
+  say "  1. Reload your shell:        ${c_dim}exec \$SHELL -l${c_off}"
+  [ "$do_tmux" = "1" ] && say "  2. Reload tmux + fetch plugins: ${c_dim}tmux source ~/.tmux.conf ; prefix + I${c_off}"
+  say "  3. Verify:                   ${c_dim}agent-resume doctor${c_off}"
+  say ""
+  say "Then test restore:  start a fresh ${c_bold}claude${c_off} in a tmux pane, then"
+  say "  ${c_dim}tmux kill-server${c_off}  and reopen tmux — the pane returns to the same"
+  say "  directory and resumes the same conversation."
+  [ -n "$installed" ] || warn "no agent shims installed (none found on PATH)"
+}
+
+cmd_uninstall() {
+  say "${c_bold}Removing agent-resume${c_off}"
+  remove_block "$(detect_shell_rc)"; ok "PATH block removed"
+  remove_block "$HOME/.tmux.conf";   ok "tmux block removed"
+  rm -rf "$HOME_DIR/shims"; ok "shims removed"
+  say "Kept adapters/hooks in $HOME_DIR (rm -rf it to fully remove)."
+  say "Reload your shell: ${c_dim}exec \$SHELL -l${c_off}"
+}
+
+cmd_doctor() {
+  say "${c_bold}agent-resume doctor${c_off}"
+  rc=0
+
+  # terminal identity
+  tid=""; src=""
+  for v in ITERM_SESSION_ID KITTY_WINDOW_ID WT_SESSION TERM_SESSION_ID TMUX_PANE STY; do
+    eval "val=\${$v:-}"; [ -n "$val" ] && { tid="$val"; src="$v"; break; }
+  done
+  [ -n "$tid" ] && ok "terminal id: $src" || { t=$(tty 2>/dev/null || echo none); warn "no stable terminal env var (tty=$t) — restore needs tmux/zellij"; }
+
+  # multiplexer
+  if [ -n "${TMUX:-}" ]; then ok "inside tmux"; else warn "not inside tmux — directory restore needs it"; fi
+  command -v tmux >/dev/null 2>&1 && ok "tmux installed: $(tmux -V 2>/dev/null)" || { bad "tmux not installed"; rc=1; }
+
+  # plugins
+  for p in tmux-resurrect tmux-continuum; do
+    if [ -d "$HOME/.tmux/plugins/$p" ] || [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/plugins/$p" ]; then
+      ok "$p present"
+    else
+      warn "$p not fetched yet (open tmux, press prefix + I)"
+    fi
+  done
+  [ -d "$HOME/.tmux/plugins/tpm" ] && ok "tpm present" || warn "tpm not found — install from tmux-plugins/tpm"
+
+  # shims on PATH
+  case ":$PATH:" in *":$HOME_DIR/shims:"*) ok "shim dir on PATH" ;; *) bad "shim dir NOT on PATH (reload shell?)"; rc=1 ;; esac
+  if [ -d "$HOME_DIR/shims" ]; then
+    for s in "$HOME_DIR/shims/"*; do
+      [ -e "$s" ] || continue
+      n="$(basename "$s")"; w="$(command -v "$n" 2>/dev/null || echo '')"
+      if [ "$w" = "$HOME_DIR/shims/$n" ]; then ok "$n resolves to shim"; else warn "$n resolves to '$w' (shim not first on PATH)"; fi
+    done
+  else
+    warn "no shims installed"
+  fi
+
+  # hook wired
+  if [ -x "$HOME_DIR/pre-restore-hook.sh" ]; then ok "pre-restore hook present"; else bad "pre-restore hook missing"; rc=1; fi
+  if [ -f "$HOME/.tmux.conf" ] && grep -q "resurrect-hook-pre-restore-all" "$HOME/.tmux.conf" 2>/dev/null; then
+    ok "hook wired in ~/.tmux.conf"
+  else
+    warn "hook not wired in ~/.tmux.conf"
+  fi
+
+  say ""
+  [ "$rc" = "0" ] && say "${c_grn}Ready.${c_off}" || say "${c_ylw}Some checks failed — see above.${c_off}"
+  return "$rc"
+}
+
+cmd_status() {
+  say "${c_bold}Recent claude sessions (by directory)${c_off}"
+  base="$HOME/.claude/projects"
+  [ -d "$base" ] || { say "  none"; return 0; }
+  # newest session file per project dir
+  for d in "$base"/*/; do
+    [ -d "$d" ] || continue
+    newest="$(ls -t "$d"*.jsonl 2>/dev/null | head -n1)"
+    [ -n "$newest" ] || continue
+    proj="$(basename "$d")"
+    sid="$(basename "$newest" .jsonl)"
+    printf '  %s%-45s%s %s\n' "$c_dim" "$proj" "$c_off" "$sid"
+  done
+}
+
+case "${1:-help}" in
+  install)   shift; cmd_install "$@" ;;
+  uninstall) shift; cmd_uninstall "$@" ;;
+  doctor)    shift; cmd_doctor "$@" ;;
+  status)    shift; cmd_status "$@" ;;
+  version|-v|--version) say "agent-resume $VERSION" ;;
+  help|-h|--help|*)
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+esac

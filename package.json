@@ -1,0 +1,47 @@
+{
+  "name": "agent-resume",
+  "version": "0.1.0",
+  "description": "Your terminal resumes the same agent session, in the same directory, after a reboot. Per-terminal directory + agent-session restore for claude, codex, and more, built on tmux-resurrect.",
+  "bin": {
+    "agent-resume": "bin/agent-resume"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "adapters/",
+    "install.sh",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "sh test/test.sh"
+  },
+  "keywords": [
+    "tmux",
+    "tmux-resurrect",
+    "tmux-continuum",
+    "claude",
+    "claude-code",
+    "codex",
+    "session",
+    "resume",
+    "restore",
+    "terminal",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rahulbansal16/agent-resume.git"
+  },
+  "homepage": "https://github.com/rahulbansal16/agent-resume#readme",
+  "bugs": {
+    "url": "https://github.com/rahulbansal16/agent-resume/issues"
+  },
+  "author": "Rahul Bansal",
+  "license": "MIT",
+  "os": [
+    "darwin",
+    "linux"
+  ]
+}
