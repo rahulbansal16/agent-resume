@@ -17,6 +17,7 @@ name: release
 on:
   release:
     types: [published]
+  workflow_dispatch: {}   # allow manual runs while validating trusted publishing
 
 permissions:
   contents: read
@@ -39,6 +40,12 @@ jobs:
       # Trusted Publishing needs npm >= 11.5.1; Node 22 still ships npm 10.
       - name: Upgrade npm
         run: npm install -g npm@latest
+
+      - name: Diagnostics
+        run: |
+          echo "npm version: $(npm --version)"
+          echo "node version: $(node --version)"
+          echo "OIDC request URL present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
 
       - name: Test before publish
         run: sh test/test.sh
