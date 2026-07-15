@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-16
+
+- Fix: the CLI now reads its version from `package.json` (single source of
+  truth) instead of a hardcoded constant that drifted (0.1.1 self-reported as
+  0.1.0).
+
 ## [0.1.1] - 2026-07-16
 
 - Fix: resolve the CLI's own path through symlinks so `install` works when the

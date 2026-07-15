@@ -16,7 +16,6 @@
 
 set -eu
 
-VERSION="0.1.0"
 BEGIN_MARK="# >>> agent-resume >>>"
 END_MARK="# <<< agent-resume <<<"
 HOME_DIR="${AGENT_RESUME_HOME:-$HOME/.config/agent-resume}"
@@ -33,6 +32,10 @@ while [ -L "$self" ]; do
   esac
 done
 SRC="$(cd "$(dirname "$self")/.." && pwd)"
+
+# Single source of truth: read the version from package.json (fallback "dev").
+VERSION="$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SRC/package.json" 2>/dev/null | head -1)"
+[ -n "$VERSION" ] || VERSION="dev"
 
 c_bold=""; c_dim=""; c_red=""; c_grn=""; c_ylw=""; c_off=""
 if [ -t 1 ]; then
