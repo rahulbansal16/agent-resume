@@ -1,27 +1,46 @@
 name: release
 
-# Publishes to npm when you cut a GitHub Release.
-# One-time setup: add an npm automation token as the repo secret NPM_TOKEN
-#   (npmjs.com -> Access Tokens -> Generate -> Automation).
+# Publishes to npm via Trusted Publishing (OIDC) when you cut a GitHub Release.
+# No tokens, no secrets, no OTP.
+#
+# One-time setup on npm (browser):
+#   npmjs.com -> the "agent-resume" package -> Settings -> Trusted Publishing
+#   -> Add publisher:
+#        Provider:   GitHub Actions
+#        Owner:      rahulbansal16
+#        Repository: agent-resume
+#        Workflow:   release.yml
+#        Environment: (leave blank)
+#
+# Then cut a release:  gh release create v0.1.1 --generate-notes
 
 on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+  id-token: write   # REQUIRED: lets the job mint an OIDC token npm trusts
+
 jobs:
   publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted Publishing needs npm >= 11.5.1; Node 22 still ships npm 10.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
       - name: Test before publish
         run: sh test/test.sh
+
+      # No NODE_AUTH_TOKEN: auth is the OIDC id-token above. Provenance is
+      # attached automatically under trusted publishing.
       - name: Publish
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
