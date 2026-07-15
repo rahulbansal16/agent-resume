@@ -131,6 +131,23 @@ case "$out" in
   *) fail=$((fail+1)); echo "  FAIL resume fallback: $out" ;;
 esac
 
+# 3. a directory with NO recorded session + agent name -> native --continue,
+#    NOT another directory's session
+mkdir -p "$HOME/nowhere"
+out="$(cd "$HOME/nowhere" && sh "$ROOT/bin/agent-resume" claude 2>&1)"
+case "$out" in
+  *"REAL:--continue"*) pass=$((pass+1)); echo "  ok   unknown dir uses native --continue (not another dir)" ;;
+  *"$EXIST"*) fail=$((fail+1)); echo "  FAIL leaked another directory's session: $out" ;;
+  *) fail=$((fail+1)); echo "  FAIL unknown dir: $out" ;;
+esac
+
+# 4. bare resume in a dir with nothing recorded -> error, resumes nothing
+if (cd "$HOME/nowhere" && sh "$ROOT/bin/agent-resume" >/dev/null 2>&1); then
+  fail=$((fail+1)); echo "  FAIL bare resume should error when nothing is recorded"
+else
+  pass=$((pass+1)); echo "  ok   bare resume errors when nothing recorded here"
+fi
+
 echo ""
 echo "passed=$pass failed=$fail"
 [ "$fail" = "0" ]

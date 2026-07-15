@@ -258,11 +258,10 @@ cmd_resume() {
   want="${1:-}"; ledger="$HOME_DIR/sessions.tsv"; cwd="$PWD"
   entry=""
   if [ -f "$ledger" ]; then
-    # newest line matching (agent filter + this cwd), then newest ignoring cwd
+    # newest recorded session for THIS directory (per-dir affinity is the point;
+    # never silently jump to another directory's session).
     entry="$(awk -F'\t' -v a="$want" -v c="$cwd" '
       (a==""||$2==a) && $3==c && ($1+0)>=best { best=$1; line=$0 } END{print line}' "$ledger")"
-    [ -n "$entry" ] || entry="$(awk -F'\t' -v a="$want" '
-      (a==""||$2==a) && ($1+0)>=best { best=$1; line=$0 } END{print line}' "$ledger")"
   fi
 
   if [ -n "$entry" ]; then

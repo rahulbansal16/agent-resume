@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-16
+
+- Fix: `agent-resume` in a directory with no recorded session no longer resumes
+  a *different* directory's session (that reintroduced the global-recency bug
+  the tool exists to fix). It now falls back to the agent's native `--continue`
+  when an agent is named, or errors with guidance for a bare invocation.
+
 ## [0.2.0] - 2026-07-16
 
 - **New: `agent-resume` resumes the last session on demand.** Run `agent-resume`
