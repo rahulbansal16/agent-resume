@@ -112,12 +112,21 @@ automatically once the CLI gains a launch-time id flag.
 | Event | Directory | Live agent process | Conversation |
 |---|---|---|---|
 | Detach / reattach (same machine) | ✅ tmux | ✅ still running | ✅ (never stopped) |
-| Reboot / `tmux kill-server` | ✅ resurrect | restarted | ✅ resumed via the shim* |
+| Reboot / `tmux kill-server` | ✅ resurrect | relaunched | ✅ `--resume`d into the same session |
 | Plain terminal, no tmux | — | — | per-launch ids only |
 
-\* Requires resurrect to relaunch the agent program. If your setup spawns it in a
-way that bypasses the pre-restore rewrite, that's the one thing to check — `doctor`
-tells you whether the hook is wired, and the reboot test above tells you if it fires.
+### Why the relaunch needs a post-restore hook
+
+tmux-resurrect restores each pane's directory + shell, but it will **not**
+relaunch Claude on its own: Claude renames its process to its version number
+(e.g. `2.1.210`), so resurrect's name-based program matching never fires for it.
+So agent-resume does the relaunch itself:
+
+1. **pre-restore hook** rewrites the saved `--session-id <uuid>` to
+   `--resume <uuid>` (for sessions that still exist).
+2. **post-restore hook** types `claude --resume <uuid>` into each restored agent
+   pane — the exact session, not a picker. resurrect keeps pane coordinates
+   stable across restore, so each pane gets its own session back.
 
 ## Uninstall
 

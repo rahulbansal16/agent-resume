@@ -5,6 +5,17 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-16
+
+- **Fix: Claude sessions now actually resume after a reboot.** tmux-resurrect
+  could not relaunch Claude because Claude renames its process to its version
+  number (e.g. `2.1.210`), so restored panes came back as a bare shell in the
+  right directory but with no conversation. Added a **post-restore hook** that
+  types `claude --resume <session-id>` into each restored agent pane, and
+  stopped listing the agents in `@resurrect-processes` (resurrect handles
+  directory + shell; agent-resume handles the agent relaunch). Verified end to
+  end with a real Claude session.
+
 ## [0.1.2] - 2026-07-16
 
 - Fix: the CLI now reads its version from `package.json` (single source of

@@ -126,7 +126,8 @@ cmd_install() {
   mkdir -p "$HOME_DIR/shims" "$HOME_DIR/adapters"
   cp "$SRC/lib/shim.sh" "$HOME_DIR/shim.sh"
   cp "$SRC/lib/pre-restore-hook.sh" "$HOME_DIR/pre-restore-hook.sh"
-  chmod +x "$HOME_DIR/pre-restore-hook.sh"
+  cp "$SRC/lib/post-restore-hook.sh" "$HOME_DIR/post-restore-hook.sh"
+  chmod +x "$HOME_DIR/pre-restore-hook.sh" "$HOME_DIR/post-restore-hook.sh"
   for a in "$SRC"/adapters/*.conf; do cp "$a" "$HOME_DIR/adapters/"; done
   ok "core files -> $HOME_DIR"
 
@@ -218,12 +219,14 @@ cmd_doctor() {
     warn "no shims installed"
   fi
 
-  # hook wired
-  if [ -x "$HOME_DIR/pre-restore-hook.sh" ]; then ok "pre-restore hook present"; else bad "pre-restore hook missing"; rc=1; fi
-  if [ -f "$HOME/.tmux.conf" ] && grep -q "resurrect-hook-pre-restore-all" "$HOME/.tmux.conf" 2>/dev/null; then
-    ok "hook wired in ~/.tmux.conf"
+  # hooks wired
+  for h in pre-restore-hook post-restore-hook; do
+    if [ -x "$HOME_DIR/$h.sh" ]; then ok "$h present"; else bad "$h missing"; rc=1; fi
+  done
+  if [ -f "$HOME/.tmux.conf" ] && grep -q "resurrect-hook-post-restore-all" "$HOME/.tmux.conf" 2>/dev/null; then
+    ok "restore hooks wired in ~/.tmux.conf"
   else
-    warn "hook not wired in ~/.tmux.conf"
+    warn "restore hooks not wired in ~/.tmux.conf"
   fi
 
   say ""
