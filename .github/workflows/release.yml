@@ -12,12 +12,12 @@ name: release
 #        Workflow:   release.yml
 #        Environment: (leave blank)
 #
-# Then cut a release:  gh release create v0.1.1 --generate-notes
+# Then bump the version and cut a release:
+#   gh release create v0.1.2 --generate-notes
 
 on:
   release:
     types: [published]
-  workflow_dispatch: {}   # allow manual runs while validating trusted publishing
 
 permissions:
   contents: read
@@ -29,10 +29,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # NOTE: deliberately no `registry-url` here. setup-node's registry-url
-      # writes an .npmrc with `_authToken=${NODE_AUTH_TOKEN}`, which makes npm
-      # attempt (empty) token auth and 404. Trusted Publishing needs npm to see
-      # no token so it uses the OIDC id-token instead.
+      # NOTE: deliberately no `registry-url`. setup-node's registry-url writes an
+      # .npmrc with `_authToken=${NODE_AUTH_TOKEN}`, which shadows OIDC and makes
+      # npm attempt (empty) token auth. Trusted Publishing needs npm to see no
+      # token so it uses the OIDC id-token from the permission above.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -41,16 +41,10 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@latest
 
-      - name: Diagnostics
-        run: |
-          echo "npm version: $(npm --version)"
-          echo "node version: $(node --version)"
-          echo "OIDC request URL present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
-
       - name: Test before publish
         run: sh test/test.sh
 
-      # No NODE_AUTH_TOKEN: auth is the OIDC id-token above. Provenance is
-      # attached automatically under trusted publishing.
+      # No NODE_AUTH_TOKEN: auth is the OIDC id-token. Provenance is attached
+      # automatically under trusted publishing.
       - name: Publish
-        run: npm publish --access public --loglevel verbose
+        run: npm publish --access public
