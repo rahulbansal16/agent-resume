@@ -17,12 +17,17 @@ self="$(basename "$0")"
 HOME_DIR="${AGENT_RESUME_HOME:-$HOME/.config/agent-resume}"
 adapter="$HOME_DIR/adapters/$self.conf"
 
-# Resolve the REAL binary: first match on PATH that is NOT our shim dir.
+# Resolve the REAL binary: first match on PATH that is NOT our shim dir or a
+# known wrapper shim that would bounce back into agent-resume.
 resolve_real() {
   _shimdir="$HOME_DIR/shims"
   _OIFS=$IFS; IFS=:
   for _d in $PATH; do
-    case "$_d" in "$_shimdir"|"") continue ;; esac
+    case "$_d" in
+      "$_shimdir"|"") continue ;;
+      */cmux-cli-shims|*/cmux-cli-shims/*) continue ;;
+      */cmux.app/Contents/Resources/bin) continue ;;
+    esac
     if [ -x "$_d/$self" ]; then IFS=$_OIFS; printf '%s\n' "$_d/$self"; return 0; fi
   done
   IFS=$_OIFS; return 1
