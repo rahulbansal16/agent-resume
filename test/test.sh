@@ -58,6 +58,16 @@ check "non-interactive fresh passes through" "REAL:" "$out"
 out="$(claude -p hi 2>&1)"
 check "print mode passes through" "REAL:-p hi" "$out"
 
+# 6. cmux shims before the real binary are skipped to avoid wrapper recursion
+mkdir -p "$WORK/cmux-cli-shims/ABCDEF"
+cat > "$WORK/cmux-cli-shims/ABCDEF/claude" <<'EOF'
+#!/bin/sh
+echo "CMUX:$*"
+EOF
+chmod +x "$WORK/cmux-cli-shims/ABCDEF/claude"
+out="$(PATH="$AGENT_RESUME_HOME/shims:$WORK/cmux-cli-shims/ABCDEF:$WORK/realbin:/usr/bin:/bin" claude -p hi 2>&1)"
+check "cmux shim is skipped when resolving real binary" "REAL:-p hi" "$out"
+
 echo "pre-restore hook:"
 mkdir -p "$HOME/.local/share/tmux/resurrect"
 LAST="$HOME/.local/share/tmux/resurrect/session-1.txt"
