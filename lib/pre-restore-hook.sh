@@ -43,8 +43,9 @@ for adapter in "$HOME_DIR"/adapters/*.conf; do
     ids="$(grep -oE -- "$AGENT_NEWID_FLAG $AGENT_ID_REGEX" "$tmp" 2>/dev/null \
             | awk '{print $2}' | sort -u)"
     for id in $ids; do
+      session_name="${AGENT_SESSION_FILE_PREFIX:-}$id.$AGENT_SESSION_EXT"
       if [ -d "$AGENT_SESSION_DIR" ] && \
-         find "$AGENT_SESSION_DIR" -name "$id.$AGENT_SESSION_EXT" -print 2>/dev/null | head -n1 | grep -q .; then
+         find "$AGENT_SESSION_DIR" -name "$session_name" -print 2>/dev/null | head -n1 | grep -q .; then
         sed "s/$AGENT_NEWID_FLAG $id/$AGENT_RESUME_FLAG $id/g" "$tmp" > "$tmp.n" && mv "$tmp.n" "$tmp"
         echo "flip"  # signal change to parent via stdout
       fi

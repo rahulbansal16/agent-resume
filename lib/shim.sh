@@ -45,7 +45,8 @@ has_any()  { _list="$1"; shift; for _f in $_list; do contains "$_f" "$@" && retu
 session_exists() {
   [ -n "$AGENT_SESSION_DIR" ] || return 1
   [ -d "$AGENT_SESSION_DIR" ] || return 1
-  find "$AGENT_SESSION_DIR" -name "$1.$AGENT_SESSION_EXT" -print 2>/dev/null | head -n1 | grep -q .
+  _session_name="${AGENT_SESSION_FILE_PREFIX:-}$1.$AGENT_SESSION_EXT"
+  find "$AGENT_SESSION_DIR" -name "$_session_name" -print 2>/dev/null | head -n1 | grep -q .
 }
 
 # Extract the value following AGENT_NEWID_FLAG, if present.

@@ -91,6 +91,59 @@ real_on_path() { # agent-name -> abs path of real binary (excludes our shim dir)
   IFS=$_OIFS; return 1
 }
 
+file_mtime() { # file -> epoch seconds (macOS/BSD, then GNU)
+  _stat_time="$(stat -f '%m' "$1" 2>/dev/null || true)"
+  case "$_stat_time" in
+    ""|*[!0-9]*) _stat_time="$(stat -c '%Y' "$1" 2>/dev/null || true)" ;;
+  esac
+  case "$_stat_time" in ""|*[!0-9]*) printf '0\n' ;; *) printf '%s\n' "$_stat_time" ;; esac
+}
+
+# Some agents cannot accept a caller-chosen id on a fresh launch, so their shim
+# cannot write sessions.tsv. For adapters that opt in, discover the newest
+# resumable session whose own metadata names this cwd.
+discover_cwd_entry() { # agent, cwd -> epoch<TAB>agent<TAB>cwd<TAB>session-id
+  _agent="$1"; _cwd="$2"; _adapter="$HOME_DIR/adapters/$_agent.conf"
+  [ -f "$_adapter" ] || return 1
+  # shellcheck disable=SC1090
+  . "$_adapter"
+  [ "${AGENT_DISCOVER_CWD:-0}" = "1" ] || return 1
+  [ -n "${AGENT_SESSION_DIR:-}" ] && [ -d "$AGENT_SESSION_DIR" ] || return 1
+
+  # Codex stores JSONL session metadata on the first line. JSON-escape the two
+  # characters that can occur in a normal filesystem path and affect matching.
+  _json_cwd="$(printf '%s' "$_cwd" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+  _needle="\"cwd\":\"$_json_cwd\""
+  _list="$(mktemp "${TMPDIR:-/tmp}/agent-resume.XXXXXX")" || return 1
+  find "$AGENT_SESSION_DIR" -type f -name "*.$AGENT_SESSION_EXT" \
+    -print 2>/dev/null > "$_list"
+
+  _newest_file=""; _newest_time=0
+  while IFS= read -r _file; do
+    # The cwd and optional source marker must be in session_meta, not in a
+    # later prompt that happens to mention the same text.
+    _meta="$(sed -n '1p' "$_file")"
+    printf '%s\n' "$_meta" | grep -F "$_needle" >/dev/null 2>&1 || continue
+    if [ -n "${AGENT_SESSION_META_FILTER:-}" ]; then
+      printf '%s\n' "$_meta" | grep -F "$AGENT_SESSION_META_FILTER" >/dev/null 2>&1 || continue
+    fi
+    _mtime="$(file_mtime "$_file")"
+    if [ "$_mtime" -ge "$_newest_time" ]; then
+      _newest_file="$_file"; _newest_time="$_mtime"
+    fi
+  done < "$_list"
+  rm -f "$_list"
+  [ -n "$_newest_file" ] || return 1
+
+  # Take the first exact "id" field (not "session_id" or "parent_thread_id").
+  _sid="$(sed -n '1p' "$_newest_file" | awk -F'"id":"' '
+    NF > 1 { split($2, part, "\""); print part[1]; exit }
+  ')"
+  [ -n "$_sid" ] || return 1
+  printf '%s\n' "$_sid" | grep -Eq "^${AGENT_ID_REGEX}$" || return 1
+  printf '%s\t%s\t%s\t%s\n' "$_newest_time" "$_agent" "$_cwd" "$_sid"
+}
+
 # Fetch tmux-resurrect + tmux-continuum into our own dir so the restore layer
 # works without requiring tpm. Idempotent: pulls if already cloned.
 fetch_tmux_plugins() {
@@ -264,6 +317,27 @@ cmd_resume() {
       (a==""||$2==a) && $3==c && ($1+0)>=best { best=$1; line=$0 } END{print line}' "$ledger")"
   fi
 
+  # Codex cannot choose an id at launch, so it has no ledger entry. Discover
+  # its session from local metadata and let it compete by recency with any
+  # ledger-backed agent session in this directory.
+  discovered=""
+  if [ -n "$want" ]; then
+    discovered="$(discover_cwd_entry "$want" "$cwd" 2>/dev/null || true)"
+  else
+    for adapter in "$HOME_DIR"/adapters/*.conf; do
+      [ -f "$adapter" ] || continue
+      candidate="$(discover_cwd_entry "$(basename "$adapter" .conf)" "$cwd" 2>/dev/null || true)"
+      [ -n "$candidate" ] || continue
+      if [ -z "$discovered" ] || [ "$(printf '%s' "$candidate" | cut -f1)" -ge "$(printf '%s' "$discovered" | cut -f1)" ]; then
+        discovered="$candidate"
+      fi
+    done
+  fi
+  if [ -n "$discovered" ] && \
+     { [ -z "$entry" ] || [ "$(printf '%s' "$discovered" | cut -f1)" -ge "$(printf '%s' "$entry" | cut -f1)" ]; }; then
+    entry="$discovered"
+  fi
+
   if [ -n "$entry" ]; then
     agent="$(printf '%s' "$entry" | cut -f2)"
     sid="$(printf '%s' "$entry" | cut -f4)"
@@ -272,8 +346,9 @@ cmd_resume() {
     . "$HOME_DIR/adapters/$agent.conf"
     real="$(real_on_path "$agent")" || die "'$agent' not found on PATH"
     # if the session file is gone, fall through to the resume-last fallback
+    session_name="${AGENT_SESSION_FILE_PREFIX:-}$sid.$AGENT_SESSION_EXT"
     if [ -z "$AGENT_SESSION_DIR" ] || [ ! -d "$AGENT_SESSION_DIR" ] || \
-       find "$AGENT_SESSION_DIR" -name "$sid.$AGENT_SESSION_EXT" -print 2>/dev/null | grep -q .; then
+       find "$AGENT_SESSION_DIR" -name "$session_name" -print 2>/dev/null | grep -q .; then
       say "${c_dim}resuming $agent ${sid%%-*}… in $cwd${c_off}"
       # shellcheck disable=SC2086
       exec "$real" $AGENT_RESUME_FLAG "$sid"
@@ -294,7 +369,7 @@ cmd_resume() {
   fi
 
   die "no recorded session for $cwd.
-  Start one by just running an agent (e.g. ${c_bold}claude${c_off}), or name it: ${c_bold}agent-resume claude${c_off}"
+  Start one by just running an agent (e.g. ${c_bold}claude${c_off} or ${c_bold}codex${c_off}), or name it: ${c_bold}agent-resume codex${c_off}"
 }
 
 case "${1:-}" in

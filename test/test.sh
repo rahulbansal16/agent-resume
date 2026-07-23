@@ -9,14 +9,17 @@ trap 'rm -rf "$WORK"' EXIT
 export HOME="$WORK/home"
 export AGENT_RESUME_HOME="$WORK/home/.config/agent-resume"
 mkdir -p "$AGENT_RESUME_HOME/shims" "$AGENT_RESUME_HOME/adapters" \
-         "$HOME/.claude/projects/proj" "$WORK/realbin"
+         "$HOME/.claude/projects/proj" "$HOME/.codex/sessions/2026/07/23" \
+         "$WORK/realbin"
 
 cp "$ROOT/adapters/claude.conf" "$AGENT_RESUME_HOME/adapters/"
+cp "$ROOT/adapters/codex.conf" "$AGENT_RESUME_HOME/adapters/"
 cp "$ROOT/lib/shim.sh" "$AGENT_RESUME_HOME/shims/claude"
+cp "$ROOT/lib/shim.sh" "$AGENT_RESUME_HOME/shims/codex"
 cp "$ROOT/lib/pre-restore-hook.sh" "$AGENT_RESUME_HOME/pre-restore-hook.sh"
 cp "$ROOT/lib/post-restore-hook.sh" "$AGENT_RESUME_HOME/post-restore-hook.sh"
-chmod +x "$AGENT_RESUME_HOME/shims/claude" "$AGENT_RESUME_HOME/pre-restore-hook.sh" \
-         "$AGENT_RESUME_HOME/post-restore-hook.sh"
+chmod +x "$AGENT_RESUME_HOME/shims/claude" "$AGENT_RESUME_HOME/shims/codex" \
+         "$AGENT_RESUME_HOME/pre-restore-hook.sh" "$AGENT_RESUME_HOME/post-restore-hook.sh"
 
 # fake real claude: echoes the args it was called with
 cat > "$WORK/realbin/claude" <<'EOF'
@@ -24,6 +27,13 @@ cat > "$WORK/realbin/claude" <<'EOF'
 echo "REAL:$*"
 EOF
 chmod +x "$WORK/realbin/claude"
+
+# fake real codex: echoes the args it was called with
+cat > "$WORK/realbin/codex" <<'EOF'
+#!/bin/sh
+echo "REAL_CODEX:$*"
+EOF
+chmod +x "$WORK/realbin/codex"
 
 export PATH="$AGENT_RESUME_HOME/shims:$WORK/realbin:/usr/bin:/bin"
 
@@ -157,6 +167,52 @@ if (cd "$HOME/nowhere" && sh "$ROOT/bin/agent-resume" >/dev/null 2>&1); then
 else
   pass=$((pass+1)); echo "  ok   bare resume errors when nothing recorded here"
 fi
+
+echo "codex discovery:"
+CODEX_DIR="$HOME/codex-project"
+OTHER_DIR="$HOME/other-codex-project"
+mkdir -p "$CODEX_DIR" "$OTHER_DIR"
+CODEX_ID="33333333-3333-3333-3333-333333333333"
+EXEC_ID="44444444-4444-4444-4444-444444444444"
+SUB_ID="55555555-5555-5555-5555-555555555555"
+OTHER_ID="66666666-6666-6666-6666-666666666666"
+CODEX_BASE="$HOME/.codex/sessions/2026/07/23"
+
+printf '{"type":"session_meta","payload":{"id":"%s","cwd":"%s","source":"cli"}}\n' \
+  "$CODEX_ID" "$CODEX_DIR" > "$CODEX_BASE/rollout-2026-07-23T10-00-00-$CODEX_ID.jsonl"
+printf '{"type":"session_meta","payload":{"id":"%s","cwd":"%s","source":"exec"}}\n' \
+  "$EXEC_ID" "$CODEX_DIR" > "$CODEX_BASE/rollout-2026-07-23T11-00-00-$EXEC_ID.jsonl"
+printf '{"type":"session_meta","payload":{"id":"%s","cwd":"%s","source":{"subagent":"review"}}}\n' \
+  "$SUB_ID" "$CODEX_DIR" > "$CODEX_BASE/rollout-2026-07-23T12-00-00-$SUB_ID.jsonl"
+printf '{"type":"session_meta","payload":{"id":"%s","cwd":"%s","source":"cli"}}\n' \
+  "$OTHER_ID" "$OTHER_DIR" > "$CODEX_BASE/rollout-2026-07-23T13-00-00-$OTHER_ID.jsonl"
+touch -t 202607231000 "$CODEX_BASE/rollout-2026-07-23T10-00-00-$CODEX_ID.jsonl"
+touch -t 202607231100 "$CODEX_BASE/rollout-2026-07-23T11-00-00-$EXEC_ID.jsonl"
+touch -t 202607231200 "$CODEX_BASE/rollout-2026-07-23T12-00-00-$SUB_ID.jsonl"
+touch -t 202607231300 "$CODEX_BASE/rollout-2026-07-23T13-00-00-$OTHER_ID.jsonl"
+# A ledger-backed Claude launch exists here, but the Codex session is newer.
+printf '100\tclaude\t%s\t%s\n' "$CODEX_DIR" "$EXIST" >> "$LED"
+
+# 5. bare resume discovers the latest interactive Codex session in this cwd.
+out="$(cd "$CODEX_DIR" && sh "$ROOT/bin/agent-resume" 2>&1)"
+case "$out" in
+  *"REAL_CODEX:resume $CODEX_ID"*) pass=$((pass+1)); echo "  ok   bare resume discovers exact codex session" ;;
+  *) fail=$((fail+1)); echo "  FAIL bare codex discovery: $out" ;;
+esac
+
+# 6. explicit codex selection uses the same exact-id discovery.
+out="$(cd "$CODEX_DIR" && sh "$ROOT/bin/agent-resume" codex 2>&1)"
+case "$out" in
+  *"REAL_CODEX:resume $CODEX_ID"*) pass=$((pass+1)); echo "  ok   named codex resume discovers exact session" ;;
+  *) fail=$((fail+1)); echo "  FAIL named codex discovery: $out" ;;
+esac
+
+# 7. newer exec/sub-agent sessions and sessions from another cwd are ignored.
+case "$out" in
+  *"$EXEC_ID"*|*"$SUB_ID"*|*"$OTHER_ID"*)
+    fail=$((fail+1)); echo "  FAIL codex discovery selected a non-interactive/other-cwd session: $out" ;;
+  *) pass=$((pass+1)); echo "  ok   ignores exec, sub-agent, and other-directory sessions" ;;
+esac
 
 echo ""
 echo "passed=$pass failed=$fail"

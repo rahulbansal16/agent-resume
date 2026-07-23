@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-23
+
+- Fix: bare `agent-resume` and `agent-resume codex` now discover the newest
+  interactive Codex session recorded for the current directory and resume its
+  exact id. Codex `exec` runs, sub-agent rollouts, and sessions belonging to
+  other directories are excluded.
+
 ## [0.2.1] - 2026-07-16
 
 - Fix: `agent-resume` in a directory with no recorded session no longer resumes
@@ -65,5 +72,11 @@ Initial release.
   TOML-style file, no code changes.
 - Zero runtime dependencies (POSIX sh); tests run without tmux or a real agent.
 
-[Unreleased]: https://github.com/rahulbansal16/agent-resume/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/rahulbansal16/agent-resume/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/rahulbansal16/agent-resume/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/rahulbansal16/agent-resume/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/rahulbansal16/agent-resume/compare/v0.1.3...v0.2.0
+[0.1.3]: https://github.com/rahulbansal16/agent-resume/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/rahulbansal16/agent-resume/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/rahulbansal16/agent-resume/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/rahulbansal16/agent-resume/releases/tag/v0.1.0
