@@ -23,9 +23,11 @@ agent-resume claude     # resume the last claude session here
 agent-resume codex      # resume the last codex session
 ```
 
-The shim records each session you start, so `agent-resume` picks the right one
-for your directory and runs `<agent> --resume <that-session-id>` — no picker, no
-remembering ids. (It also powers the automatic tmux restore below.)
+`agent-resume` picks the right session for your directory and runs the agent's
+exact-id resume command — no picker and no remembering ids. For Claude, the shim
+records the id it assigns at launch. For Codex, which chooses its own id, the
+command reads the local session metadata and selects the newest interactive
+session whose recorded `cwd` matches the current directory.
 
 ```
 tmux              keeps live sessions alive on detach/reattach   (the 95% case, free)
@@ -119,8 +121,10 @@ AGENT_ID_REGEX="[0-9a-f-]{36}"
 ```
 
 Agents that can't set a session id at launch (`codex` today) still get directory
-restore from tmux and a best-effort `resume`; exact conversation restore turns on
-automatically once the CLI gains a launch-time id flag.
+restore from tmux. Codex also gets exact, per-directory manual resume because its
+local session metadata includes both the id and `cwd`; non-interactive and
+sub-agent rollouts are ignored. Exact automatic tmux relaunch remains
+best-effort until Codex gains a launch-time id flag.
 
 ## How much survives what
 

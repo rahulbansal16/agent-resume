@@ -1,6 +1,6 @@
 {
   "name": "agent-resume",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Your terminal resumes the same agent session, in the same directory, after a reboot. Per-terminal directory + agent-session restore for claude, codex, and more, built on tmux-resurrect.",
   "bin": {
     "agent-resume": "bin/agent-resume"
